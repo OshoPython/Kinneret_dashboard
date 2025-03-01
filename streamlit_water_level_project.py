@@ -8,6 +8,7 @@ from PIL import Image
 import io
 import requests
 
+
 # Page configuration
 st.set_page_config(
     page_title="Sea of Galilee Water Level Monitor",
