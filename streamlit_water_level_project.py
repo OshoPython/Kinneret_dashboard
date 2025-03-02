@@ -173,7 +173,7 @@ one_year_ago = latest_date - pd.DateOffset(years=1)
 # Tabs for different visualizations
 tab1, tab2, tab3 = st.tabs(["Main Dashboard", "Historical Analysis", "Seasonal Patterns"])
 # newest date
-latest_date = df['date'].max().strftime('%d/%m/%Y')
+#latest_date = df['date'].max().strftime('%d/%m/%Y')
 
 with tab1:
     # Get current metrics with more robust calculations
@@ -204,7 +204,7 @@ with tab1:
     else:
         yearly_change = 0
 
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         st.markdown('<div class="metric-card">', unsafe_allow_html=True)
@@ -225,11 +225,9 @@ with tab1:
         st.markdown('<div class="metric-card">', unsafe_allow_html=True)
         st.metric("Last Year Change", f"{yearly_change:.2f}m", delta=f"{yearly_change:.2f}m")
         st.markdown('</div>', unsafe_allow_html=True)
-    with col5:
-        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-        st.metric("Last Updated", latest_date)
-        st.markdown('</div>', unsafe_allow_html=True)
-
+    st.markdown(
+        f'<div style="text-align: right; color: #666; padding: 10px; font-size: 0.9em;">Last Updated: <strong>{latest_date}</strong></div>',
+        unsafe_allow_html=True)
 
     # Add Sea of Galilee image (you'll need to replace with your actual image)
     st.markdown("### Sea of Galilee")
