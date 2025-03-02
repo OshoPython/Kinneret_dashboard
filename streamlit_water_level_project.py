@@ -173,7 +173,7 @@ one_year_ago = latest_date - pd.DateOffset(years=1)
 # Tabs for different visualizations
 tab1, tab2, tab3 = st.tabs(["Main Dashboard", "Historical Analysis", "Seasonal Patterns"])
 # newest date
-#latest_date = df['date'].max().strftime('%d/%m/%Y')
+latest_date = df['date'].max().strftime('%d/%m/%Y')
 
 with tab1:
     # Get current metrics with more robust calculations
