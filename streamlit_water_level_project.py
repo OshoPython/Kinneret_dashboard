@@ -11,7 +11,7 @@ import requests
 
 # Page configuration
 st.set_page_config(
-    page_title="Sea of Galilee Waterrr Level Monitor",
+    page_title="Sea of Galilee Water Level Monitor",
     page_icon="🌊",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -437,7 +437,7 @@ with tab1:
 
     with col1:
         st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-        st.metric("Current Level", f"{current_level:.2f}m")
+        st.metric("Current Level", f"{current_level:.1f}m")
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col2:
