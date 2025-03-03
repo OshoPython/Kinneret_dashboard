@@ -299,10 +299,8 @@ def load_data():
             return pd.DataFrame(columns=['date', 'water_level', 'year', 'month', 'Survey_Date', 'Kinneret_Level'])
 
 
-
-
-
 def check_api_status():
+
     """Check if the data.gov.il API is responding correctly"""
     try:
         # The resource ID for the Kinneret water level dataset
@@ -338,6 +336,7 @@ if api_status:
             color: #155724; 
             padding: 10px; 
             border-radius: 5px; 
+            margin-top: 20px;  /* This adds space above the box */
             margin-bottom: 15px; 
             display: flex; 
             align-items: center;
@@ -364,6 +363,7 @@ else:
             color: #721c24; 
             padding: 10px; 
             border-radius: 5px; 
+            margin-top: 20px;  /* This adds space above the box */
             margin-bottom: 15px; 
             display: flex; 
             align-items: center;
