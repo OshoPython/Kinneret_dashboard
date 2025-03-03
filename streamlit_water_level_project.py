@@ -11,7 +11,7 @@ import requests
 
 # Page configuration
 st.set_page_config(
-    page_title="Sea of Galilee Waterrrrr Level Monitor",
+    page_title="Sea of Galilee Water Level Monitor",
     page_icon="🌊",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -160,106 +160,151 @@ st.sidebar.markdown(
 @st.cache_data(ttl=3600)  # Cache for 1 hour
 def load_data():
     try:
-        # The resource ID for the Kinneret water level dataset
+        # First attempt to fetch from API
         resource_id = "2de7b543-e13d-4e7e-b4c8-56071bc4d3c8"
-
-        # Initialize variables for pagination
-        all_records = []
-        offset = 0
-        batch_size = 1000  # Maximum records per request
-
-        # Build the API URL
         base_url = 'https://data.gov.il/api/3/action/datastore_search'
 
-        with st.spinner("Fetching data from API..."):
-            while True:
-                # Set up parameters with pagination
-                params = {
-                    'resource_id': resource_id,
-                    'limit': batch_size,
-                    'offset': offset
-                }
+        # Get the total record count first to optimize retrieval
+        params = {
+            'resource_id': resource_id,
+            'limit': 1  # Just to get the total count
+        }
 
-                # Make the request to the API
+        # First request to get total count
+        initial_response = requests.get(base_url, params=params)
+        initial_data = initial_response.json()
+
+        if not initial_data.get('success', False):
+            st.error("Failed to connect to data.gov.il API")
+            raise Exception("API request was not successful")
+
+        # Get total records count
+        total_records = initial_data.get('result', {}).get('total', 0)
+
+        # If no records, raise exception
+        if total_records == 0:
+            raise Exception("No records found in the dataset")
+
+        st.info(f"Found {total_records} records in the Kinneret water level dataset")
+
+        # Retrieve all records at once if possible, or use pagination if needed
+        all_records = []
+
+        # Try to get all records in one request if the dataset isn't too large
+        if total_records <= 32000:  # API limit is typically 32000
+            params = {
+                'resource_id': resource_id,
+                'limit': total_records  # Get all at once
+            }
+
+            with st.spinner(f"Fetching all {total_records} records from API..."):
                 response = requests.get(base_url, params=params)
-
-                # Check if request was successful
-                if response.status_code != 200:
-                    st.error(f"API request failed with status code {response.status_code}")
-                    break
-
-                # Parse the JSON response
                 data = response.json()
 
-                # Check if the API request itself returned success
-                if not data.get('success', False):
-                    st.error(f"API Error: {data.get('error', {})}")
-                    break
+                if data.get('success', False):
+                    all_records = data.get('result', {}).get('records', [])
+                    st.success(f"Successfully retrieved all {len(all_records)} records!")
+                else:
+                    raise Exception(f"API Error: {data.get('error', {})}")
+        else:
+            # Use pagination for very large datasets
+            offset = 0
+            batch_size = 10000  # Larger batch size for efficiency
 
-                # Get this batch of records
-                result = data.get('result', {})
-                records = result.get('records', [])
+            with st.spinner(f"Fetching {total_records} records in batches..."):
+                while offset < total_records:
+                    params = {
+                        'resource_id': resource_id,
+                        'limit': batch_size,
+                        'offset': offset
+                    }
 
-                # If no records were returned, we're done
-                if not records:
-                    break
+                    response = requests.get(base_url, params=params)
+                    data = response.json()
 
-                # Add these records to our collection
-                all_records.extend(records)
+                    if not data.get('success', False):
+                        raise Exception(f"API Error at offset {offset}: {data.get('error', {})}")
 
-                # Get the total number of records (if not already known)
-                total_records = result.get('total', 0)
+                    batch_records = data.get('result', {}).get('records', [])
+                    if not batch_records:
+                        break
 
-                # Update offset for next batch
-                offset += batch_size
+                    all_records.extend(batch_records)
+                    offset += len(batch_records)
 
-                # If we've retrieved all records, we're done
-                if len(all_records) >= total_records:
-                    break
+                    # Show progress
+                    progress = min(offset, total_records) / total_records
+                    st.progress(progress)
+
+                st.success(f"Successfully retrieved {len(all_records)} records!")
+
+        # Check if we got all the records we expected
+        if len(all_records) < total_records * 0.9:  # Allow for some discrepancy
+            st.warning(f"Retrieved fewer records ({len(all_records)}) than expected ({total_records})")
 
         # Convert to DataFrame
         df = pd.DataFrame(all_records)
 
-        # Make column names consistent with what the rest of the code expects
-        # The API returns columns with specific names - we need to identify and rename them
+        # Show the actual column names from the API to help with debugging
+        st.write("Columns in API data:", df.columns.tolist())
 
-        # Find the date column - look for column names containing 'date' or 'survey'
-        date_col = next((col for col in df.columns if 'date' in col.lower() or 'survey' in col.lower()), None)
-        if date_col:
+        # Identify the correct column names
+        # Looking for date column
+        date_columns = [col for col in df.columns if any(term in col.lower() for term in ['date', 'survey', 'תאריך'])]
+        if date_columns:
+            date_col = date_columns[0]  # Use the first matching column
+            st.info(f"Using '{date_col}' as the date column")
             df['Survey_Date'] = df[date_col]
         else:
-            st.warning("Could not identify date column in API response")
+            st.error("Could not find date column in API response")
+            st.write("Available columns:", df.columns.tolist())
+            raise Exception("Date column not found")
 
-        # Find the water level column - look for column names containing 'level' or 'kinneret'
-        level_col = next((col for col in df.columns if 'level' in col.lower() or 'kinneret' in col.lower()), None)
-        if level_col:
-            df['Kinneret_Level'] = pd.to_numeric(df[level_col], errors='coerce')  # Convert to numeric
+        # Looking for water level column
+        level_columns = [col for col in df.columns if
+                         any(term in col.lower() for term in ['level', 'kinneret', 'מפלס', 'כנרת'])]
+        if level_columns:
+            level_col = level_columns[0]  # Use the first matching column
+            st.info(f"Using '{level_col}' as the water level column")
+            # Convert to numeric, ensuring we have floating point numbers
+            df['Kinneret_Level'] = pd.to_numeric(df[level_col], errors='coerce')
         else:
-            st.warning("Could not identify water level column in API response")
+            st.error("Could not find water level column in API response")
+            st.write("Available columns:", df.columns.tolist())
+            raise Exception("Water level column not found")
 
-        # Convert dates to datetime format
-        # First, try to determine the date format from a sample
-        try:
-            # Attempt to convert using different date formats
-            if 'Survey_Date' in df.columns:
-                # Try standard format first
-                try:
-                    df['date'] = pd.to_datetime(df['Survey_Date'])
-                except:
-                    # Try other common formats
-                    date_formats = ['%Y-%m-%dT%H:%M:%S', '%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y']
-                    for fmt in date_formats:
-                        try:
-                            df['date'] = pd.to_datetime(df['Survey_Date'], format=fmt)
-                            break  # Exit the loop if successful
-                        except:
-                            continue
-        except Exception as e:
-            st.warning(f"Date conversion issue: {e}")
-            # Fallback method
+        # Check for missing values after conversion
+        missing_dates = df['Survey_Date'].isna().sum()
+        missing_levels = df['Kinneret_Level'].isna().sum()
+
+        if missing_dates > 0 or missing_levels > 0:
+            st.warning(
+                f"Found {missing_dates} missing dates and {missing_levels} missing water levels after conversion")
+
+        # Convert dates to datetime - try multiple formats
+        date_conversion_succeeded = False
+        date_formats = ['%Y-%m-%dT%H:%M:%S', '%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y']
+
+        for fmt in date_formats:
+            try:
+                df['date'] = pd.to_datetime(df['Survey_Date'], format=fmt)
+                date_conversion_succeeded = True
+                st.info(f"Successfully converted dates using format: {fmt}")
+                break
+            except:
+                continue
+
+        if not date_conversion_succeeded:
+            st.warning("Could not parse dates with specific format, trying auto-detection")
+            # Last resort - try pandas automatic parsing
             df['date'] = pd.to_datetime(df['Survey_Date'], errors='coerce')
+            # Check if we have valid dates
+            if df['date'].isna().sum() > 0:
+                st.error(f"Date conversion resulted in {df['date'].isna().sum()} missing values")
+            else:
+                st.success("Date auto-detection successful")
 
-        # Ensure water_level column exists
+        # Add water_level column for consistency with existing code
         df['water_level'] = df['Kinneret_Level']
 
         # Add year and month columns
@@ -269,19 +314,58 @@ def load_data():
         # Sort by date (oldest to newest)
         df = df.sort_values('date')
 
-        # Reset index after sorting
+        # Drop rows with missing key data
+        original_count = len(df)
+        df = df.dropna(subset=['date', 'water_level'])
+        if len(df) < original_count:
+            st.warning(f"Dropped {original_count - len(df)} rows with missing data")
+
+        # Reset index after sorting and filtering
         df = df.reset_index(drop=True)
 
-        # Drop any rows with missing key data
-        df = df.dropna(subset=['date', 'water_level'])
+        # Display date range of the data
+        if not df.empty:
+            min_date = df['date'].min().strftime('%Y-%m-%d')
+            max_date = df['date'].max().strftime('%Y-%m-%d')
+            st.info(f"Data spans from {min_date} to {max_date}")
+
+        # Show a sample of the processed data
+        st.write("Sample of processed data:", df.head())
 
         return df
 
     except Exception as e:
-        st.error(f"Error loading data: {e}")
-        # Return empty dataframe with expected columns as fallback
-        return pd.DataFrame(columns=['date', 'water_level', 'year', 'month', 'Survey_Date', 'Kinneret_Level'])
+        st.error(f"Error loading data from API: {e}")
+        st.warning("Falling back to local CSV file...")
 
+        try:
+            # Try to load local CSV as fallback
+            df = pd.read_csv('water_level.csv')
+
+            # Convert dates if needed
+            if 'date' not in df.columns and 'Survey_Date' in df.columns:
+                df['date'] = pd.to_datetime(df['Survey_Date'], errors='coerce')
+
+            # Ensure water_level column exists
+            if 'water_level' not in df.columns and 'Kinneret_Level' in df.columns:
+                df['water_level'] = df['Kinneret_Level']
+
+            # Add year and month columns if needed
+            if 'year' not in df.columns:
+                df['year'] = df['date'].dt.year
+            if 'month' not in df.columns:
+                df['month'] = df['date'].dt.month
+
+            # Sort by date
+            df = df.sort_values('date').reset_index(drop=True)
+
+            st.success("Successfully loaded data from local CSV")
+            return df
+
+        except Exception as e2:
+            st.error(f"Local fallback also failed: {e2}")
+            # Return empty dataframe with expected columns
+            return pd.DataFrame(columns=['date', 'water_level', 'year', 'month', 'Survey_Date', 'Kinneret_Level'])
 df = load_data()
 
 # Calculate the min and max values with some padding
