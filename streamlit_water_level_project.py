@@ -67,7 +67,8 @@ st.title("Sea of Galilee Water Level Monitor")
 
 # Sidebar
 st.sidebar.header("About")
-CACHE_TTL = st.sidebar.slider("Cache duration (hours)", 1, 24, 1) * 3600
+dev_mode = st.sidebar.checkbox("Development Mode", value=False)
+
 
 # Profile picture (circular and centered)
 profile_url = "https://media.licdn.com/dms/image/v2/D4E03AQHM2iVNATNcdg/profile-displayphoto-shrink_400_400/profile-displayphoto-shrink_400_400/0/1705672518081?e=1746057600&v=beta&t=GVuWbbGddqgfidw2aemUaJGXSlWGk1LfaHTgXEXnSc8"
@@ -157,7 +158,10 @@ st.sidebar.markdown(
     #     st.error(f"Error loading data: {e}")
     #     # Return empty dataframe with expected columns as fallback
     #     return pd.DataFrame(columns=['date', 'water_level', 'year', 'month'])
-@st.cache_data(ttl=10)  # Cache for 1 hour
+#@st.cache_data(ttl=10)  # Cache for 1 hour
+cache_ttl = 10 if dev_mode else 3600  # 10 seconds in dev mode, 1 hour in production
+
+
 def load_data():
     try:
         # First attempt to fetch from API
