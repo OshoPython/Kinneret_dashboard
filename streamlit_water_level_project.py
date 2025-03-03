@@ -157,7 +157,7 @@ st.sidebar.markdown(
     #     st.error(f"Error loading data: {e}")
     #     # Return empty dataframe with expected columns as fallback
     #     return pd.DataFrame(columns=['date', 'water_level', 'year', 'month'])
-@st.cache_data(ttl=3600)  # Cache for 1 hour
+@st.cache_data(ttl=10)  # Cache for 1 hour
 def load_data():
     try:
         # First attempt to fetch from API
@@ -420,7 +420,7 @@ with tab1:
 
     with col1:
         st.markdown('<div class="metric-card">', unsafe_allow_html=True)
-        st.metric("Current Level", f"{current_level:.1f}m")
+        st.metric("Current Level", f"{current_level:.2f}m")
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col2:
