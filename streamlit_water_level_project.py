@@ -158,8 +158,8 @@ st.sidebar.markdown(
     #     st.error(f"Error loading data: {e}")
     #     # Return empty dataframe with expected columns as fallback
     #     return pd.DataFrame(columns=['date', 'water_level', 'year', 'month'])
-#@st.cache_data(ttl=10)  # Cache for 1 hour
-cache_ttl = 10 if dev_mode else 3600  # 10 seconds in dev mode, 1 hour in production
+
+@st.cache_data(ttl=10)  # Cache for 1 hour
 
 
 def load_data():
@@ -249,94 +249,94 @@ def load_data():
         # Convert to DataFrame
         df = pd.DataFrame(all_records)
 
-        # Show the actual column names from the API to help with debugging
-        st.write("Columns in API data:", df.columns.tolist())
-
-        # Identify the correct column names
-        # Looking for date column
-        date_columns = [col for col in df.columns if any(term in col.lower() for term in ['date', 'survey', 'תאריך'])]
-        if date_columns:
-            date_col = date_columns[0]  # Use the first matching column
-            st.info(f"Using '{date_col}' as the date column")
-            df['Survey_Date'] = df[date_col]
-        else:
-            st.error("Could not find date column in API response")
-            st.write("Available columns:", df.columns.tolist())
-            raise Exception("Date column not found")
-
-        # Looking for water level column
-        level_columns = [col for col in df.columns if
-                         any(term in col.lower() for term in ['level', 'kinneret', 'מפלס', 'כנרת'])]
-        if level_columns:
-            level_col = level_columns[0]  # Use the first matching column
-            st.info(f"Using '{level_col}' as the water level column")
-            # Convert to numeric, ensuring we have floating point numbers
-            df['Kinneret_Level'] = pd.to_numeric(df[level_col], errors='coerce')
-        else:
-            st.error("Could not find water level column in API response")
-            st.write("Available columns:", df.columns.tolist())
-            raise Exception("Water level column not found")
-
-        # Check for missing values after conversion
-        missing_dates = df['Survey_Date'].isna().sum()
-        missing_levels = df['Kinneret_Level'].isna().sum()
-
-        if missing_dates > 0 or missing_levels > 0:
-            st.warning(
-                f"Found {missing_dates} missing dates and {missing_levels} missing water levels after conversion")
-
-        # Convert dates to datetime - try multiple formats
-        date_conversion_succeeded = False
-        date_formats = ['%Y-%m-%dT%H:%M:%S', '%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y']
-
-        for fmt in date_formats:
-            try:
-                df['date'] = pd.to_datetime(df['Survey_Date'], format=fmt)
-                date_conversion_succeeded = True
-                st.info(f"Successfully converted dates using format: {fmt}")
-                break
-            except:
-                continue
-
-        if not date_conversion_succeeded:
-            st.warning("Could not parse dates with specific format, trying auto-detection")
-            # Last resort - try pandas automatic parsing
-            df['date'] = pd.to_datetime(df['Survey_Date'], errors='coerce')
-            # Check if we have valid dates
-            if df['date'].isna().sum() > 0:
-                st.error(f"Date conversion resulted in {df['date'].isna().sum()} missing values")
-            else:
-                st.success("Date auto-detection successful")
-
-        # Add water_level column for consistency with existing code
-        df['water_level'] = df['Kinneret_Level']
-
-        # Add year and month columns
-        df['year'] = df['date'].dt.year
-        df['month'] = df['date'].dt.month
-
-        # Sort by date (oldest to newest)
-        df = df.sort_values('date')
-
-        # Drop rows with missing key data
-        original_count = len(df)
-        df = df.dropna(subset=['date', 'water_level'])
-        if len(df) < original_count:
-            st.warning(f"Dropped {original_count - len(df)} rows with missing data")
-
-        # Reset index after sorting and filtering
-        df = df.reset_index(drop=True)
-
-        # Display date range of the data
-        if not df.empty:
-            min_date = df['date'].min().strftime('%Y-%m-%d')
-            max_date = df['date'].max().strftime('%Y-%m-%d')
-            st.info(f"Data spans from {min_date} to {max_date}")
-
-        # Show a sample of the processed data
-        st.write("Sample of processed data:", df.head())
-
-        return df
+        # # Show the actual column names from the API to help with debugging
+        # st.write("Columns in API data:", df.columns.tolist())
+        #
+        # # Identify the correct column names
+        # # Looking for date column
+        # date_columns = [col for col in df.columns if any(term in col.lower() for term in ['date', 'survey', 'תאריך'])]
+        # if date_columns:
+        #     date_col = date_columns[0]  # Use the first matching column
+        #     st.info(f"Using '{date_col}' as the date column")
+        #     df['Survey_Date'] = df[date_col]
+        # else:
+        #     st.error("Could not find date column in API response")
+        #     st.write("Available columns:", df.columns.tolist())
+        #     raise Exception("Date column not found")
+        #
+        # # Looking for water level column
+        # level_columns = [col for col in df.columns if
+        #                  any(term in col.lower() for term in ['level', 'kinneret', 'מפלס', 'כנרת'])]
+        # if level_columns:
+        #     level_col = level_columns[0]  # Use the first matching column
+        #     st.info(f"Using '{level_col}' as the water level column")
+        #     # Convert to numeric, ensuring we have floating point numbers
+        #     df['Kinneret_Level'] = pd.to_numeric(df[level_col], errors='coerce')
+        # else:
+        #     st.error("Could not find water level column in API response")
+        #     st.write("Available columns:", df.columns.tolist())
+        #     raise Exception("Water level column not found")
+        #
+        # # Check for missing values after conversion
+        # missing_dates = df['Survey_Date'].isna().sum()
+        # missing_levels = df['Kinneret_Level'].isna().sum()
+        #
+        # if missing_dates > 0 or missing_levels > 0:
+        #     st.warning(
+        #         f"Found {missing_dates} missing dates and {missing_levels} missing water levels after conversion")
+        #
+        # # Convert dates to datetime - try multiple formats
+        # date_conversion_succeeded = False
+        # date_formats = ['%Y-%m-%dT%H:%M:%S', '%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y']
+        #
+        # for fmt in date_formats:
+        #     try:
+        #         df['date'] = pd.to_datetime(df['Survey_Date'], format=fmt)
+        #         date_conversion_succeeded = True
+        #         st.info(f"Successfully converted dates using format: {fmt}")
+        #         break
+        #     except:
+        #         continue
+        #
+        # if not date_conversion_succeeded:
+        #     st.warning("Could not parse dates with specific format, trying auto-detection")
+        #     # Last resort - try pandas automatic parsing
+        #     df['date'] = pd.to_datetime(df['Survey_Date'], errors='coerce')
+        #     # Check if we have valid dates
+        #     if df['date'].isna().sum() > 0:
+        #         st.error(f"Date conversion resulted in {df['date'].isna().sum()} missing values")
+        #     else:
+        #         st.success("Date auto-detection successful")
+        #
+        # # Add water_level column for consistency with existing code
+        # df['water_level'] = df['Kinneret_Level']
+        #
+        # # Add year and month columns
+        # df['year'] = df['date'].dt.year
+        # df['month'] = df['date'].dt.month
+        #
+        # # Sort by date (oldest to newest)
+        # df = df.sort_values('date')
+        #
+        # # Drop rows with missing key data
+        # original_count = len(df)
+        # df = df.dropna(subset=['date', 'water_level'])
+        # if len(df) < original_count:
+        #     st.warning(f"Dropped {original_count - len(df)} rows with missing data")
+        #
+        # # Reset index after sorting and filtering
+        # df = df.reset_index(drop=True)
+        #
+        # # Display date range of the data
+        # if not df.empty:
+        #     min_date = df['date'].min().strftime('%Y-%m-%d')
+        #     max_date = df['date'].max().strftime('%Y-%m-%d')
+        #     st.info(f"Data spans from {min_date} to {max_date}")
+        #
+        # # Show a sample of the processed data
+        # #st.write("Sample of processed data:", df.head())
+        #
+        # return df
 
     except Exception as e:
         st.error(f"Error loading data from API: {e}")
