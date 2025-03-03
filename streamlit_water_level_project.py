@@ -436,22 +436,22 @@ with tab1:
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+        # st.markdown('<div class="metric-card">', unsafe_allow_html=True)
         st.metric("Current Level", f"{current_level:.1f}m")
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col2:
-        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+        # st.markdown('<div class="metric-card">', unsafe_allow_html=True)
         st.metric("Daily Change", f"{daily_change:.2f}m", delta=f"{daily_change:.2f}m")
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col3:
-        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+        # st.markdown('<div class="metric-card">', unsafe_allow_html=True)
         st.metric("Last Monthly Change", f"{monthly_change:.2f}m", delta=f"{monthly_change:.2f}m")
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col4:
-        st.markdown('<div class="metric-card">', unsafe_allow_html=True)
+        # st.markdown('<div class="metric-card">', unsafe_allow_html=True)
         st.metric("Last Year Change", f"{yearly_change:.2f}m", delta=f"{yearly_change:.2f}m")
         st.markdown('</div>', unsafe_allow_html=True)
     st.markdown(
