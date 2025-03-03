@@ -67,7 +67,6 @@ st.title("Sea of Galilee Water Level Monitor")
 
 # Sidebar
 st.sidebar.header("About")
-CACHE_TTL = st.sidebar.slider("Cache duration (hours)", 1, 24, 1) * 3600
 
 # Profile picture (circular and centered)
 profile_url = "https://media.licdn.com/dms/image/v2/D4E03AQHM2iVNATNcdg/profile-displayphoto-shrink_400_400/profile-displayphoto-shrink_400_400/0/1705672518081?e=1746057600&v=beta&t=GVuWbbGddqgfidw2aemUaJGXSlWGk1LfaHTgXEXnSc8"
@@ -83,14 +82,14 @@ st.sidebar.markdown(
 
 # Description text
 st.sidebar.markdown(
-    """    
+    """
     """
 )
 st.sidebar.markdown(
-    """    
-    The Sea of Galilee (Lake Kinneret) is Israel's largest freshwater lake and an important 
-    water resource. This dashboard visualizes historical water level data, helping to understand 
-    patterns and trends over time.    
+    """
+    The Sea of Galilee (Lake Kinneret) is Israel's largest freshwater lake and an important
+    water resource. This dashboard visualizes historical water level data, helping to understand
+    patterns and trends over time.
     """
 )
 
@@ -125,144 +124,23 @@ st.sidebar.markdown(
 )
 
 # Load example data (replace with your actual data loading code)
-
-#def load_data():
-    # try:
-    #     # Read the CSV file (adjust the path if needed)
-    #     df = pd.read_csv('water_level.csv')
-    #
-    #     # Make sure the column names match what's in your CSV
-    #     # If your columns are named differently, rename them here
-    #     df.columns = ['Survey_Date', 'Kinneret_Level']
-    #
-    #     # Convert dates to datetime format for proper handling
-    #     df['date'] = pd.to_datetime(df['Survey_Date'], format='%d/%m/%Y')
-    #
-    #     # Add water_level column that matches the naming used in the rest of the code
-    #     df['water_level'] = df['Kinneret_Level']
-    #
-    #     # Add year and month columns which are used for different visualizations
-    #     df['year'] = df['date'].dt.year
-    #     df['month'] = df['date'].dt.month
-    #
-    #     # Sort by date (oldest to newest)
-    #     df = df.sort_values('date')
-    #
-    #     # Reset index after sorting
-    #     df = df.reset_index(drop=True)
-    #
-    #     return df
-    #
-    # except Exception as e:
-    #     st.error(f"Error loading data: {e}")
-    #     # Return empty dataframe with expected columns as fallback
-    #     return pd.DataFrame(columns=['date', 'water_level', 'year', 'month'])
-@st.cache_data(ttl=3600)  # Cache for 1 hour
+@st.cache_data(ttl=3600)
 def load_data():
     try:
-        # The resource ID for the Kinneret water level dataset
-        resource_id = "2de7b543-e13d-4e7e-b4c8-56071bc4d3c8"
+        # Read the CSV file (adjust the path if needed)
+        df = pd.read_csv('water_level.csv')
 
-        # Initialize variables for pagination
-        all_records = []
-        offset = 0
-        batch_size = 1000  # Maximum records per request
+        # Make sure the column names match what's in your CSV
+        # If your columns are named differently, rename them here
+        df.columns = ['Survey_Date', 'Kinneret_Level']
 
-        # Build the API URL
-        base_url = 'https://data.gov.il/api/3/action/datastore_search'
+        # Convert dates to datetime format for proper handling
+        df['date'] = pd.to_datetime(df['Survey_Date'], format='%d/%m/%Y')
 
-        with st.spinner("Fetching data from API..."):
-            while True:
-                # Set up parameters with pagination
-                params = {
-                    'resource_id': resource_id,
-                    'limit': batch_size,
-                    'offset': offset
-                }
-
-                # Make the request to the API
-                response = requests.get(base_url, params=params)
-
-                # Check if request was successful
-                if response.status_code != 200:
-                    st.error(f"API request failed with status code {response.status_code}")
-                    break
-
-                # Parse the JSON response
-                data = response.json()
-
-                # Check if the API request itself returned success
-                if not data.get('success', False):
-                    st.error(f"API Error: {data.get('error', {})}")
-                    break
-
-                # Get this batch of records
-                result = data.get('result', {})
-                records = result.get('records', [])
-
-                # If no records were returned, we're done
-                if not records:
-                    break
-
-                # Add these records to our collection
-                all_records.extend(records)
-
-                # Get the total number of records (if not already known)
-                total_records = result.get('total', 0)
-
-                # Update offset for next batch
-                offset += batch_size
-
-                # If we've retrieved all records, we're done
-                if len(all_records) >= total_records:
-                    break
-
-        # Convert to DataFrame
-        df = pd.DataFrame(all_records)
-
-        # Make column names consistent with what the rest of the code expects
-        # The API returns columns with specific names - we need to identify and rename them
-
-        # Find the date column - look for column names containing 'date' or 'survey'
-        date_col = next((col for col in df.columns if 'date' in col.lower() or 'survey' in col.lower()), None)
-        if date_col:
-            df['Survey_Date'] = df[date_col]
-        else:
-            st.warning("Could not identify date column in API response")
-
-        # Find the water level column - look for column names containing 'level' or 'kinneret'
-        level_col = next((col for col in df.columns if 'level' in col.lower() or 'kinneret' in col.lower()), None)
-        if level_col:
-            df['Kinneret_Level'] = pd.to_numeric(df[level_col], errors='coerce')  # Convert to numeric
-        else:
-            st.warning("Could not identify water level column in API response")
-
-        # Convert dates to datetime format
-        # First, try to determine the date format from a sample
-        try:
-            # Attempt to convert using different date formats
-            if 'Survey_Date' in df.columns:
-                # Try standard format first
-                try:
-                    df['date'] = pd.to_datetime(df['Survey_Date'])
-                except:
-                    # Try other common formats
-                    date_formats = ['%Y-%m-%dT%H:%M:%S', '%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y']
-                    for fmt in date_formats:
-                        try:
-                            df['date'] = pd.to_datetime(df['Survey_Date'], format=fmt)
-                            break  # Exit the loop if successful
-                        except:
-                            continue
-        except Exception as e:
-            st.warning(f"Date conversion issue: {e}")
-            # Fallback method
-            df['date'] = pd.to_datetime(df['Survey_Date'], errors='coerce')
-
-        # Ensure water_level column exists
+        # Add water_level column that matches the naming used in the rest of the code
         df['water_level'] = df['Kinneret_Level']
 
-        # Add year and month columns
+        # Add year and month columns which are used for different visualizations
         df['year'] = df['date'].dt.year
         df['month'] = df['date'].dt.month
 
@@ -272,15 +150,13 @@ def load_data():
         # Reset index after sorting
         df = df.reset_index(drop=True)
 
-        # Drop any rows with missing key data
-        df = df.dropna(subset=['date', 'water_level'])
-
         return df
 
     except Exception as e:
         st.error(f"Error loading data: {e}")
         # Return empty dataframe with expected columns as fallback
-        return pd.DataFrame(columns=['date', 'water_level', 'year', 'month', 'Survey_Date', 'Kinneret_Level'])
+        return pd.DataFrame(columns=['date', 'water_level', 'year', 'month'])
+
 
 df = load_data()
 
@@ -619,6 +495,6 @@ with tab3:
 st.markdown("""
 <div class="footer">
     <p>Data sourced from Israeli water authority | Dor G ©</p>
-    
+
 </div>
 """, unsafe_allow_html=True)
