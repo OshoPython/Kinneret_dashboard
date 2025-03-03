@@ -67,6 +67,8 @@ st.title("Sea of Galilee Water Level Monitor")
 
 # Sidebar
 st.sidebar.header("About")
+dev_mode = st.sidebar.checkbox("Development Mode", value=False)
+
 
 # Profile picture (circular and centered)
 profile_url = "https://media.licdn.com/dms/image/v2/D4E03AQHM2iVNATNcdg/profile-displayphoto-shrink_400_400/profile-displayphoto-shrink_400_400/0/1705672518081?e=1746057600&v=beta&t=GVuWbbGddqgfidw2aemUaJGXSlWGk1LfaHTgXEXnSc8"
@@ -82,14 +84,14 @@ st.sidebar.markdown(
 
 # Description text
 st.sidebar.markdown(
-    """    
+    """
     """
 )
 st.sidebar.markdown(
-    """    
-    The Sea of Galilee (Lake Kinneret) is Israel's largest freshwater lake and an important 
-    water resource. This dashboard visualizes historical water level data, helping to understand 
-    patterns and trends over time.    
+    """
+    The Sea of Galilee (Lake Kinneret) is Israel's largest freshwater lake and an important
+    water resource. This dashboard visualizes historical water level data, helping to understand
+    patterns and trends over time.
     """
 )
 
@@ -157,26 +159,27 @@ st.sidebar.markdown(
     #     # Return empty dataframe with expected columns as fallback
     #     return pd.DataFrame(columns=['date', 'water_level', 'year', 'month'])
 
-@st.cache_data(ttl=3600)  # Cache for 1 hour in production
+@st.cache_data(ttl=10)  # Cache for 1 hour
+
+
 def load_data():
     try:
-        # The resource ID for the Kinneret water level dataset
+        # First attempt to fetch from API
         resource_id = "2de7b543-e13d-4e7e-b4c8-56071bc4d3c8"
-
-        # Build the API URL
         base_url = 'https://data.gov.il/api/3/action/datastore_search'
 
-        # Initialize variables for pagination
-        all_records = []
-        offset = 0
-        batch_size = 1000  # Maximum records per request
+        # Get the total record count first to optimize retrieval
+        params = {
+            'resource_id': resource_id,
+            'limit': 1  # Just to get the total count
+        }
 
-        # First request to get total count (without displaying info)
-        params = {'resource_id': resource_id, 'limit': 1}
+        # First request to get total count
         initial_response = requests.get(base_url, params=params)
         initial_data = initial_response.json()
 
         if not initial_data.get('success', False):
+            st.error("Failed to connect to data.gov.il API")
             raise Exception("API request was not successful")
 
         # Get total records count
@@ -186,76 +189,124 @@ def load_data():
         if total_records == 0:
             raise Exception("No records found in the dataset")
 
-        # Retrieve all records
-        if total_records <= 32000:
-            # Get all at once
+        st.info(f"Found {total_records} records in the Kinneret water level dataset")
+
+        # Retrieve all records at once if possible, or use pagination if needed
+        all_records = []
+
+        # Try to get all records in one request if the dataset isn't too large
+        if total_records <= 32000:  # API limit is typically 32000
             params = {
                 'resource_id': resource_id,
-                'limit': total_records
+                'limit': total_records  # Get all at once
             }
 
-            response = requests.get(base_url, params=params)
-            data = response.json()
-
-            if data.get('success', False):
-                all_records = data.get('result', {}).get('records', [])
-            else:
-                raise Exception(f"API Error: {data.get('error', {})}")
-        else:
-            # Use pagination for very large datasets
-            while offset < total_records:
-                params = {
-                    'resource_id': resource_id,
-                    'limit': batch_size,
-                    'offset': offset
-                }
-
+            with st.spinner(f"Fetching all {total_records} records from API..."):
                 response = requests.get(base_url, params=params)
                 data = response.json()
 
-                if not data.get('success', False):
-                    raise Exception(f"API Error at offset {offset}: {data.get('error', {})}")
+                if data.get('success', False):
+                    all_records = data.get('result', {}).get('records', [])
+                    st.success(f"Successfully retrieved all {len(all_records)} records!")
+                else:
+                    raise Exception(f"API Error: {data.get('error', {})}")
+        else:
+            # Use pagination for very large datasets
+            offset = 0
+            batch_size = 10000  # Larger batch size for efficiency
 
-                batch_records = data.get('result', {}).get('records', [])
-                if not batch_records:
-                    break
+            with st.spinner(f"Fetching {total_records} records in batches..."):
+                while offset < total_records:
+                    params = {
+                        'resource_id': resource_id,
+                        'limit': batch_size,
+                        'offset': offset
+                    }
 
-                all_records.extend(batch_records)
-                offset += len(batch_records)
+                    response = requests.get(base_url, params=params)
+                    data = response.json()
+
+                    if not data.get('success', False):
+                        raise Exception(f"API Error at offset {offset}: {data.get('error', {})}")
+
+                    batch_records = data.get('result', {}).get('records', [])
+                    if not batch_records:
+                        break
+
+                    all_records.extend(batch_records)
+                    offset += len(batch_records)
+
+                    # Show progress
+                    progress = min(offset, total_records) / total_records
+                    st.progress(progress)
+
+                st.success(f"Successfully retrieved {len(all_records)} records!")
+
+        # Check if we got all the records we expected
+        if len(all_records) < total_records * 0.9:  # Allow for some discrepancy
+            st.warning(f"Retrieved fewer records ({len(all_records)}) than expected ({total_records})")
 
         # Convert to DataFrame
         df = pd.DataFrame(all_records)
 
-        # Process column names without displaying debug info
-        date_columns = [col for col in df.columns if any(term in col.lower() for term in ['date', 'survey', 'תאריך'])]
-        level_columns = [col for col in df.columns if
-                         any(term in col.lower() for term in ['level', 'kinneret', 'מפלס', 'כנרת'])]
+        # Show the actual column names from the API to help with debugging
+        st.write("Columns in API data:", df.columns.tolist())
 
+        # Identify the correct column names
+        # Looking for date column
+        date_columns = [col for col in df.columns if any(term in col.lower() for term in ['date', 'survey', 'תאריך'])]
         if date_columns:
-            date_col = date_columns[0]
+            date_col = date_columns[0]  # Use the first matching column
+            st.info(f"Using '{date_col}' as the date column")
             df['Survey_Date'] = df[date_col]
         else:
+            st.error("Could not find date column in API response")
+            st.write("Available columns:", df.columns.tolist())
             raise Exception("Date column not found")
 
+        # Looking for water level column
+        level_columns = [col for col in df.columns if
+                         any(term in col.lower() for term in ['level', 'kinneret', 'מפלס', 'כנרת'])]
         if level_columns:
-            level_col = level_columns[0]
+            level_col = level_columns[0]  # Use the first matching column
+            st.info(f"Using '{level_col}' as the water level column")
+            # Convert to numeric, ensuring we have floating point numbers
             df['Kinneret_Level'] = pd.to_numeric(df[level_col], errors='coerce')
         else:
+            st.error("Could not find water level column in API response")
+            st.write("Available columns:", df.columns.tolist())
             raise Exception("Water level column not found")
 
-        # Convert dates to datetime - try multiple formats without displaying debug info
+        # Check for missing values after conversion
+        missing_dates = df['Survey_Date'].isna().sum()
+        missing_levels = df['Kinneret_Level'].isna().sum()
+
+        if missing_dates > 0 or missing_levels > 0:
+            st.warning(
+                f"Found {missing_dates} missing dates and {missing_levels} missing water levels after conversion")
+
+        # Convert dates to datetime - try multiple formats
+        date_conversion_succeeded = False
         date_formats = ['%Y-%m-%dT%H:%M:%S', '%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y']
 
         for fmt in date_formats:
             try:
                 df['date'] = pd.to_datetime(df['Survey_Date'], format=fmt)
+                date_conversion_succeeded = True
+                st.info(f"Successfully converted dates using format: {fmt}")
                 break
             except:
                 continue
 
-        if 'date' not in df.columns or df['date'].isna().all():
+        if not date_conversion_succeeded:
+            st.warning("Could not parse dates with specific format, trying auto-detection")
             # Last resort - try pandas automatic parsing
             df['date'] = pd.to_datetime(df['Survey_Date'], errors='coerce')
+            # Check if we have valid dates
+            if df['date'].isna().sum() > 0:
+                st.error(f"Date conversion resulted in {df['date'].isna().sum()} missing values")
+            else:
+                st.success("Date auto-detection successful")
 
         # Add water_level column for consistency with existing code
         df['water_level'] = df['Kinneret_Level']
@@ -268,121 +319,57 @@ def load_data():
         df = df.sort_values('date')
 
         # Drop rows with missing key data
+        original_count = len(df)
         df = df.dropna(subset=['date', 'water_level'])
+        if len(df) < original_count:
+            st.warning(f"Dropped {original_count - len(df)} rows with missing data")
 
         # Reset index after sorting and filtering
         df = df.reset_index(drop=True)
 
+        # Display date range of the data
+        if not df.empty:
+            min_date = df['date'].min().strftime('%Y-%m-%d')
+            max_date = df['date'].max().strftime('%Y-%m-%d')
+            st.info(f"Data spans from {min_date} to {max_date}")
+
+        # Show a sample of the processed data
+        #st.write("Sample of processed data:", df.head())
+
         return df
 
     except Exception as e:
-        # Silently fall back to local CSV without showing error messages
+        st.error(f"Error loading data from API: {e}")
+        st.warning("Falling back to local CSV file...")
+
         try:
+            # Try to load local CSV as fallback
             df = pd.read_csv('water_level.csv')
 
+            # Convert dates if needed
             if 'date' not in df.columns and 'Survey_Date' in df.columns:
                 df['date'] = pd.to_datetime(df['Survey_Date'], errors='coerce')
 
+            # Ensure water_level column exists
             if 'water_level' not in df.columns and 'Kinneret_Level' in df.columns:
                 df['water_level'] = df['Kinneret_Level']
 
+            # Add year and month columns if needed
             if 'year' not in df.columns:
                 df['year'] = df['date'].dt.year
             if 'month' not in df.columns:
                 df['month'] = df['date'].dt.month
 
+            # Sort by date
             df = df.sort_values('date').reset_index(drop=True)
 
+            st.success("Successfully loaded data from local CSV")
             return df
 
-        except Exception:
+        except Exception as e2:
+            st.error(f"Local fallback also failed: {e2}")
+            # Return empty dataframe with expected columns
             return pd.DataFrame(columns=['date', 'water_level', 'year', 'month', 'Survey_Date', 'Kinneret_Level'])
-
-
-
-
-
-def check_api_status():
-    """Check if the data.gov.il API is responding correctly"""
-    try:
-        # The resource ID for the Kinneret water level dataset
-        resource_id = "2de7b543-e13d-4e7e-b4c8-56071bc4d3c8"
-
-        # Build a simple API request (just asking for 1 record to minimize data transfer)
-        base_url = 'https://data.gov.il/api/3/action/datastore_search'
-        params = {'resource_id': resource_id, 'limit': 1}
-
-        # Try to connect to the API with a short timeout
-        response = requests.get(base_url, params=params, timeout=5)
-
-        # Check if request was successful and returned valid JSON
-        if response.status_code == 200 and response.json().get('success', False):
-            return True
-        return False
-    except:
-        # Any exception means the API is not working
-        return False
-
-
-# Add this in your sidebar section
-# Assuming you already have a sidebar with other content
-
-# Check API status and display indicator
-api_status = check_api_status()
-
-if api_status:
-    st.sidebar.markdown(
-        """
-        <div style="
-            background-color: #d4edda; 
-            color: #155724; 
-            padding: 10px; 
-            border-radius: 5px; 
-            margin-bottom: 15px; 
-            display: flex; 
-            align-items: center;
-            font-weight: 500;
-        ">
-            <span style="
-                background-color: #28a745; 
-                height: 10px; 
-                width: 10px; 
-                border-radius: 50%; 
-                display: inline-block; 
-                margin-right: 8px;
-            "></span>
-            API Connected
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-else:
-    st.sidebar.markdown(
-        """
-        <div style="
-            background-color: #f8d7da; 
-            color: #721c24; 
-            padding: 10px; 
-            border-radius: 5px; 
-            margin-bottom: 15px; 
-            display: flex; 
-            align-items: center;
-            font-weight: 500;
-        ">
-            <span style="
-                background-color: #dc3545; 
-                height: 10px; 
-                width: 10px; 
-                border-radius: 50%; 
-                display: inline-block; 
-                margin-right: 8px;
-            "></span>
-            API Disconnected
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
 df = load_data()
 
 # Calculate the min and max values with some padding
@@ -720,6 +707,6 @@ with tab3:
 st.markdown("""
 <div class="footer">
     <p>Data sourced from Israeli water authority | Dor G ©</p>
-    
+
 </div>
 """, unsafe_allow_html=True)
